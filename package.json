@@ -1,0 +1,15 @@
+{
+  "name": "qsd",
+  "version": "1.0.0",
+  "description": "QRIS Statis ke Dinamis: ubah QRIS statis jadi QRIS dengan nominal terisi. Tanpa dependensi.",
+  "type": "module",
+  "main": "qris.js",
+  "types": "qris.d.ts",
+  "exports": {
+    ".": { "types": "./qris.d.ts", "default": "./qris.js" }
+  },
+  "files": ["qris.js", "qris.d.ts"],
+  "scripts": {
+    "test": "node --test"
+  },
+}

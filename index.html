@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QSD — QRIS Statis ke Dinamis</title>
+  <meta name="description" content="Ubah QRIS statis menjadi QRIS dinamis dengan nominal terisi. Semua proses di browser.">
+  <style>
+    :root {
+      --bg: #f3f2ef; --card: #fff; --text: #1a2233; --muted: #6b7280; --border: #dfddd6;
+      --brand: #1c2955; --brand-text: #fff; --ok-bg: #ecfdf5; --ok: #065f46; --err-bg: #fef2f2; --err: #991b1b;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1420; --card: #181f2e; --text: #e8ebf2; --muted: #9aa3b5; --border: #2a3346;
+        --brand: #8fa7ff; --brand-text: #0f1420; --ok-bg: #0f2a22; --ok: #6ee7b7; --err-bg: #2a1215; --err: #fca5a5;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 480px; margin: 0 auto; padding: 20px 16px 40px; display: flex; flex-direction: column; gap: 14px; }
+    h1 { font-size: 22px; margin: 4px 0 0; }
+    .sub { color: var(--muted); margin: 0; font-size: 13px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .step { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 16px; border-radius: 12px;
+           border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; font-weight: 700; cursor: pointer; text-decoration: none; }
+    .btn.primary { background: var(--brand); color: var(--brand-text); border-color: var(--brand); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .row > .btn { flex: 1 1 140px; }
+    .amount { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 12px; padding: 0 14px; background: var(--card); }
+    .amount span { font-weight: 700; color: var(--muted); }
+    .amount input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 22px; font-weight: 800; padding: 10px 8px; outline: none; }
+    textarea { width: 100%; min-height: 80px; border: 1px solid var(--border); border-radius: 12px; padding: 10px; background: var(--card); color: var(--text); font: 12px/1.4 ui-monospace, monospace; }
+    .msg { border-radius: 12px; padding: 10px 12px; font-size: 13px; }
+    .msg.ok { background: var(--ok-bg); color: var(--ok); }
+    .msg.err { background: var(--err-bg); color: var(--err); }
+    .merchant b { display: block; font-size: 16px; }
+    details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+    .qr { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+    .qr img { width: min(100%, 300px); aspect-ratio: 1; border-radius: 12px; background: #fff; padding: 8px; }
+    .qr .total { font-size: 26px; font-weight: 800; }
+    .hidden { display: none !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    footer { color: var(--muted); font-size: 12px; text-align: center; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>QSD</h1>
+    <p class="sub">QRIS statis → dinamis. Upload QRIS, isi nominal, lalu QR siap discan dengan nominal terisi otomatis.</p>
+  </header>
+
+  <section class="card" aria-labelledby="s1">
+    <span class="step" id="s1">1 · QRIS statis</span>
+    <label class="btn" for="file">Upload gambar QRIS</label>
+    <input id="file" class="sr-only" type="file" accept="image/*">
+    <details>
+      <summary>Atau tempel teks QRIS</summary>
+      <textarea id="paste" placeholder="000201010211..." aria-label="Teks QRIS statis"></textarea>
+    </details>
+    <div id="merchant" class="msg ok merchant hidden" role="status"></div>
+    <div id="err1" class="msg err hidden" role="alert"></div>
+  </section>
+
+  <section class="card" aria-labelledby="s2">
+    <label class="step" id="s2" for="amount">2 · Nominal</label>
+    <div class="amount"><span>Rp</span><input id="amount" inputmode="numeric" autocomplete="off" placeholder="0"></div>
+    <button id="gen" class="btn primary" type="button" disabled>Generate QR</button>
+  </section>
+
+  <section id="result" class="card hidden" aria-labelledby="s3" aria-live="polite">
+    <span class="step" id="s3">3 · QRIS dinamis</span>
+    <div class="qr">
+      <img id="qrImg" alt="">
+      <span id="qrMerchant" class="sub"></span>
+      <span id="qrTotal" class="total"></span>
+    </div>
+    <div class="row">
+      <a id="download" class="btn primary" download>Unduh PNG</a>
+      <button id="copy" class="btn" type="button">Salin teks QRIS</button>
+    </div>
+    <p class="sub">Uji dulu dengan scan (tanpa membayar) di e-wallet/m-banking yang dipakai pelanggan. Format dinamis hasil ubahan ini tidak resmi.</p>
+  </section>
+
+  <footer>Semua proses berjalan di browser. Gambar dan teks QRIS tidak dikirim ke server mana pun.</footer>
+</main>
+
+<script type="module">
+  import { parseQris, toDynamicQris } from "./qris.js";
+  import jsQR from "https://esm.sh/jsqr@1.4.0";
+  import QRCode from "https://esm.sh/qrcode@1.5.4";
+
+  const $ = (id) => document.getElementById(id);
+  const rupiah = (n) => "Rp " + n.toLocaleString("id-ID");
+  const STORE_KEY = "qsd:qris";
+  let qris = "";
+
+  const show = (el, text) => { el.textContent = text; el.classList.toggle("hidden", !text); };
+  const amountValue = () => Number($("amount").value.replace(/\D/g, ""));
+  const refresh = () => { $("gen").disabled = !(qris && amountValue() > 0); };
+
+  function setQris(text, { remember = true } = {}) {
+    const parsed = parseQris(text);
+    if (!parsed.ok) {
+      show($("err1"), parsed.error);
+      return;
+    }
+    qris = text.trim();
+    show($("err1"), "");
+    $("merchant").innerHTML = "";
+    const name = document.createElement("b");
+    name.textContent = parsed.merchantName;
+    $("merchant").append(name, [parsed.merchantCity, parsed.nmid && "NMID " + parsed.nmid].filter(Boolean).join(" · "));
+    $("merchant").classList.remove("hidden");
+    $("result").classList.add("hidden");
+    if (remember) { try { localStorage.setItem(STORE_KEY, qris); } catch {} }
+    refresh();
+  }
+
+  async function decodeImage(file) {
+    const bitmap = await createImageBitmap(file);
+    // Foto besar diperkecil dulu supaya decode cepat di HP; QR tetap terbaca di 1200px
+    const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    return jsQR(data, width, height)?.data ?? null;
+  }
+
+  $("file").addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const text = await decodeImage(file);
+      text ? setQris(text) : show($("err1"), "QR tidak terbaca. Gunakan foto/screenshot yang jelas dan tidak terpotong.");
+    } catch {
+      show($("err1"), "Gagal membaca gambar.");
+    }
+  });
+
+  $("paste").addEventListener("input", (e) => e.target.value.trim() && setQris(e.target.value));
+
+  $("amount").addEventListener("input", (e) => {
+    const n = Number(e.target.value.replace(/\D/g, "").slice(0, 12));
+    e.target.value = n ? n.toLocaleString("id-ID") : "";
+    refresh();
+  });
+
+  $("gen").addEventListener("click", async () => {
+    const amount = amountValue();
+    try {
+      const dynamic = toDynamicQris(qris, amount);
+      const url = await QRCode.toDataURL(dynamic, { width: 600, margin: 2, errorCorrectionLevel: "M" });
+      const merchant = parseQris(qris).merchantName;
+      $("qrImg").src = url;
+      $("qrImg").alt = `QRIS ${merchant} ${rupiah(amount)}`;
+      $("qrMerchant").textContent = merchant;
+      $("qrTotal").textContent = rupiah(amount);
+      $("download").href = url;
+      $("download").download = `QRIS-${amount}.png`;
+      $("copy").dataset.text = dynamic;
+      $("result").classList.remove("hidden");
+      $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (err) {
+      show($("err1"), err.message);
+    }
+  });
+
+  $("copy").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText($("copy").dataset.text);
+      $("copy").textContent = "Tersalin ✓";
+      setTimeout(() => ($("copy").textContent = "Salin teks QRIS"), 1500);
+    } catch {
+      $("copy").textContent = "Gagal menyalin";
+    }
+  });
+
+  try {
+    const saved = localStorage.getItem(STORE_KEY);
+    if (saved) setQris(saved, { remember: false });
+  } catch {}
+</script>
+</body>
+</html>
