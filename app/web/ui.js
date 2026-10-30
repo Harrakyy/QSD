@@ -34,17 +34,24 @@ function setQris(text, { remember = true } = {}) {
   refresh();
 }
 
+// jsQR bisa gagal di satu skala tapi berhasil di skala lain (terbukti pada foto QRIS asli di 1200px),
+// jadi coba beberapa ukuran sampai terbaca. Ukuran asli dibatasi 2000px supaya tetap cepat di HP.
+const DECODE_SIZES = [2000, 1000, 800, 600, 1400];
+
 async function decodeImage(file) {
   const bitmap = await createImageBitmap(file);
-  // Foto besar diperkecil dulu supaya decode cepat di HP; QR tetap terbaca di 1200px
-  const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  return jsQR(data, width, height)?.data ?? null;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  for (const max of DECODE_SIZES) {
+    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const text = jsQR(data, width, height)?.data;
+    if (text) return text;
+  }
+  return null;
 }
 
 $("file").addEventListener("change", async (e) => {
