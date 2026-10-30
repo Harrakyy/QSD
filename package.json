@@ -11,5 +11,5 @@
   "files": ["qris.js", "qris.d.ts"],
   "scripts": {
     "test": "node --test"
-  },
+  }
 }
